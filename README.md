@@ -134,10 +134,15 @@ Find **Protocol Buffers Descriptions** at the [`./pb` directory](./pb).
 ### (Option 3) With API Management
 
 ```
+  #Replace PROJECT_ID in api_config.yaml
   cd endpoints-services
   gcloud endpoints services deploy api_descriptor.pb api_config.yaml
 
-  
+  cd ../endpoints-manifests
+  kubectl apply -f .
+
+  cd ../istio-manifests
+  kubectl apply -f .
 ```
 
 ### (Optional) Deploying on a Istio-installed cluster
