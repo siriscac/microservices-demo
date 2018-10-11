@@ -26,7 +26,7 @@ config_version: 3
 #
 # Name of the service configuration.
 #
-name: hipstershop1.endpoints.legacy-bookstore.cloud.goog
+name: hipstershop.endpoints.<PROJECT_ID>.cloud.goog
 
 #
 # API title to appear in the user interface (Google Cloud Console).

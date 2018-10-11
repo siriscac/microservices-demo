@@ -131,6 +131,15 @@ Find **Protocol Buffers Descriptions** at the [`./pb` directory](./pb).
 
         kubectl get service frontend-external
 
+### (Option 3) With API Management
+
+```
+  cd endpoints-services
+  gcloud endpoints services deploy api_descriptor.pb api_config.yaml
+
+  
+```
+
 ### (Optional) Deploying on a Istio-installed cluster
 
 > **Note:** you followed GKE deployment steps above, run `skaffold delete` first
