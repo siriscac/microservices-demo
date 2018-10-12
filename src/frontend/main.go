@@ -32,6 +32,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
+	apiclient "github.com/siriscac/microservices-demo/fontend/apiclient/client"
 )
 
 const (
@@ -57,26 +58,29 @@ var (
 type ctxKeySessionID struct{}
 
 type frontendServer struct {
-	productCatalogSvcAddr string
-	productCatalogSvcConn *grpc.ClientConn
+	// productCatalogSvcAddr string
+	// productCatalogSvcConn *grpc.ClientConn
+	//
+	// currencySvcAddr string
+	// currencySvcConn *grpc.ClientConn
+	//
+	// cartSvcAddr string
+	// cartSvcConn *grpc.ClientConn
+	//
+	// recommendationSvcAddr string
+	// recommendationSvcConn *grpc.ClientConn
+	//
+	// checkoutSvcAddr string
+	// checkoutSvcConn *grpc.ClientConn
+	//
+	// shippingSvcAddr string
+	// shippingSvcConn *grpc.ClientConn
+	//
+	// adSvcAddr string
+	// adSvcConn *grpc.ClientConn
 
-	currencySvcAddr string
-	currencySvcConn *grpc.ClientConn
-
-	cartSvcAddr string
-	cartSvcConn *grpc.ClientConn
-
-	recommendationSvcAddr string
-	recommendationSvcConn *grpc.ClientConn
-
-	checkoutSvcAddr string
-	checkoutSvcConn *grpc.ClientConn
-
-	shippingSvcAddr string
-	shippingSvcConn *grpc.ClientConn
-
-	adSvcAddr string
-	adSvcConn *grpc.ClientConn
+	transport httptransport
+	client apiclient
 }
 
 func main() {
@@ -102,21 +106,25 @@ func main() {
 	}
 	addr := os.Getenv("LISTEN_ADDR")
 	svc := new(frontendServer)
-	mustMapEnv(&svc.productCatalogSvcAddr, "PRODUCT_CATALOG_SERVICE_ADDR")
-	mustMapEnv(&svc.currencySvcAddr, "CURRENCY_SERVICE_ADDR")
-	mustMapEnv(&svc.cartSvcAddr, "CART_SERVICE_ADDR")
-	mustMapEnv(&svc.recommendationSvcAddr, "RECOMMENDATION_SERVICE_ADDR")
-	mustMapEnv(&svc.checkoutSvcAddr, "CHECKOUT_SERVICE_ADDR")
-	mustMapEnv(&svc.shippingSvcAddr, "SHIPPING_SERVICE_ADDR")
-	mustMapEnv(&svc.adSvcAddr, "AD_SERVICE_ADDR")
 
-	mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
-	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
-	mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
-	mustConnGRPC(ctx, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
-	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
-	mustConnGRPC(ctx, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
-	mustConnGRPC(ctx, &svc.adSvcConn, svc.adSvcAddr)
+	svc.transport := httptransport.New(os.Getenv("HOST"), "", nil)
+	svc.client := apiclient.New(transport, strfmt.Default)
+
+	// mustMapEnv(&svc.productCatalogSvcAddr, "PRODUCT_CATALOG_SERVICE_ADDR")
+	// mustMapEnv(&svc.currencySvcAddr, "CURRENCY_SERVICE_ADDR")
+	// mustMapEnv(&svc.cartSvcAddr, "CART_SERVICE_ADDR")
+	// mustMapEnv(&svc.recommendationSvcAddr, "RECOMMENDATION_SERVICE_ADDR")
+	// mustMapEnv(&svc.checkoutSvcAddr, "CHECKOUT_SERVICE_ADDR")
+	// mustMapEnv(&svc.shippingSvcAddr, "SHIPPING_SERVICE_ADDR")
+	// mustMapEnv(&svc.adSvcAddr, "AD_SERVICE_ADDR")
+	//
+	// mustConnGRPC(ctx, &svc.currencySvcConn, svc.currencySvcAddr)
+	// mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
+	// mustConnGRPC(ctx, &svc.cartSvcConn, svc.cartSvcAddr)
+	// mustConnGRPC(ctx, &svc.recommendationSvcConn, svc.recommendationSvcAddr)
+	// mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
+	// mustConnGRPC(ctx, &svc.checkoutSvcConn, svc.checkoutSvcAddr)
+	// mustConnGRPC(ctx, &svc.adSvcConn, svc.adSvcAddr)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", svc.homeHandler).Methods(http.MethodGet, http.MethodHead)

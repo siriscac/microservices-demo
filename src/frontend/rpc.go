@@ -18,7 +18,8 @@ import (
 	"context"
 	"time"
 
-	pb "github.com/GoogleCloudPlatform/microservices-demo/src/frontend/genproto"
+	"github.com/siriscac/microservices-demo/fontend/apiclient/client"
+	models "github.com/siriscac/microservices-demo/fontend/apiclient/models"
 
 	"github.com/pkg/errors"
 )
@@ -28,8 +29,7 @@ const (
 )
 
 func (fe *frontendServer) getCurrencies(ctx context.Context) ([]string, error) {
-	currs, err := pb.NewCurrencyServiceClient(fe.currencySvcConn).
-		GetSupportedCurrencies(ctx, &pb.Empty{})
+	currs, err := fe.client.CurrencyService.GetSupportedCurrencies(ctx, &currency_service.GetSupportedCurrenciesParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -42,68 +42,71 @@ func (fe *frontendServer) getCurrencies(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-func (fe *frontendServer) getProducts(ctx context.Context) ([]*pb.Product, error) {
-	resp, err := pb.NewProductCatalogServiceClient(fe.productCatalogSvcConn).
-		ListProducts(ctx, &pb.Empty{})
-	return resp.GetProducts(), err
+func (fe *frontendServer) getProducts(ctx context.Context) ([]*models.HipstershopProduct, error) {
+	resp, err := fe.client.ProductCatalogService.ListProducts(ctx, &product_catalog_service.ListProductsParams{})
+	return resp.Products, err
 }
 
-func (fe *frontendServer) getProduct(ctx context.Context, id string) (*pb.Product, error) {
-	resp, err := pb.NewProductCatalogServiceClient(fe.productCatalogSvcConn).
-		GetProduct(ctx, &pb.GetProductRequest{Id: id})
+func (fe *frontendServer) getProduct(ctx context.Context, id string) (*models.HipstershopProduct, error) {
+	resp, err := fe.client.ProductCatalogService.GetProduct(ctx, &product_catalog_service.GetProductParams{Id: id})
 	return resp, err
 }
 
-func (fe *frontendServer) getCart(ctx context.Context, userID string) ([]*pb.CartItem, error) {
-	resp, err := pb.NewCartServiceClient(fe.cartSvcConn).GetCart(ctx, &pb.GetCartRequest{UserId: userID})
-	return resp.GetItems(), err
+func (fe *frontendServer) getCart(ctx context.Context, userID string) ([]*models.HipstershopCartItem, error) {
+	resp, err := fe.client.CartService.GetCart(ctx, &cart_service.GetCartParams{UserId: userID})
+	return resp.Items, err
 }
 
 func (fe *frontendServer) emptyCart(ctx context.Context, userID string) error {
-	_, err := pb.NewCartServiceClient(fe.cartSvcConn).EmptyCart(ctx, &pb.EmptyCartRequest{UserId: userID})
+	_, err := fe.client.CartService.EmptyCart(ctx, &cart_service.EmptyCartParams{UserId: userID})
 	return err
 }
 
 func (fe *frontendServer) insertCart(ctx context.Context, userID, productID string, quantity int32) error {
-	_, err := pb.NewCartServiceClient(fe.cartSvcConn).AddItem(ctx, &pb.AddItemRequest{
-		UserId: userID,
-		Item: &pb.CartItem{
-			ProductId: productID,
-			Quantity:  quantity},
-	})
+	_, err := fe.client.CartService.AddItem(ctx, &cart_service.AddItemParams{
+		Body: models.HipstershopAddItemRequest{
+			UserId: userID,
+			Item: models.HipstershopCartItem{
+				ProductId: productID,
+				Quantity:  quantity},
+			}
+		})
 	return err
 }
 
-func (fe *frontendServer) convertCurrency(ctx context.Context, money *pb.Money, currency string) (*pb.Money, error) {
-	if avoidNoopCurrencyConversionRPC && money.GetCurrencyCode() == currency {
+func (fe *frontendServer) convertCurrency(ctx context.Context, money *models.HipstershopMoney, currency string) (*models.HipstershopMoney, error) {
+	if avoidNoopCurrencyConversionRPC && money.CurrencyCode == currency {
 		return money, nil
 	}
-	return pb.NewCurrencyServiceClient(fe.currencySvcConn).
-		Convert(ctx, &pb.CurrencyConversionRequest{
-			From:   money,
-			ToCode: currency})
+	return fe.client.CurrencyService.Convert(ctx,
+		&currency_service.ConvertParams{
+			FromCurrencyCode:   money,
+			ToCode: currency
+		})
 }
 
-func (fe *frontendServer) getShippingQuote(ctx context.Context, items []*pb.CartItem, currency string) (*pb.Money, error) {
-	quote, err := pb.NewShippingServiceClient(fe.shippingSvcConn).GetQuote(ctx,
-		&pb.GetQuoteRequest{
-			Address: nil,
-			Items:   items})
+func (fe *frontendServer) getShippingQuote(ctx context.Context, items []*models.HipstershopCartItem, currency string) (*models.HipstershopMoney, error) {
+	quote, err := fe.client.ShippingService.GetQuote(ctx,
+		&shipping_service.GetQuoteParams{
+			Body: models.HipstershopGetQuoteRequest{
+				Address: nil,
+				Items:   items
+			}
+		})
 	if err != nil {
 		return nil, err
 	}
-	localized, err := fe.convertCurrency(ctx, quote.GetCostUsd(), currency)
+	localized, err := fe.convertCurrency(ctx, quote.CostUsd, currency)
 	return localized, errors.Wrap(err, "failed to convert currency for shipping cost")
 }
 
-func (fe *frontendServer) getRecommendations(ctx context.Context, userID string, productIDs []string) ([]*pb.Product, error) {
-	resp, err := pb.NewRecommendationServiceClient(fe.recommendationSvcConn).ListRecommendations(ctx,
-		&pb.ListRecommendationsRequest{UserId: userID, ProductIds: productIDs})
+func (fe *frontendServer) getRecommendations(ctx context.Context, userID string, productIDs []string) ([]*models.HipstershopProduct, error) {
+	resp, err := fe.client.RecommendationService.ListRecommendations(ctx, &recommendation_service.ListRecommendationsParams{UserId: userID, ProductIds: productIDs})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*pb.Product, len(resp.GetProductIds()))
-	for i, v := range resp.GetProductIds() {
+	out := make([]*models.HipstershopProduct, len(resp.ProductIds))
+	for i, v := range resp.ProductIds {
 		p, err := fe.getProduct(ctx, v)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get recommended product info (#%s)", v)
@@ -116,12 +119,12 @@ func (fe *frontendServer) getRecommendations(ctx context.Context, userID string,
 	return out, err
 }
 
-func (fe *frontendServer) getAd(ctx context.Context, ctxKeys []string) ([]*pb.Ad, error) {
+func (fe *frontendServer) getAd(ctx context.Context, ctxKeys []string) ([]*models.HipstershopAd, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*100)
 	defer cancel()
 
-	resp, err := pb.NewAdServiceClient(fe.adSvcConn).GetAds(ctx, &pb.AdRequest{
+	resp, err := fe.client.AdService.GetAds(ctx, &ad_service.GetAdsParams{
 		ContextKeys: ctxKeys,
 	})
-	return resp.GetAds(), errors.Wrap(err, "failed to get ads")
+	return resp.Ads, errors.Wrap(err, "failed to get ads")
 }

@@ -28,8 +28,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	pb "github.com/GoogleCloudPlatform/microservices-demo/src/frontend/genproto"
 	"github.com/GoogleCloudPlatform/microservices-demo/src/frontend/money"
+
+	"github.com/siriscac/microservices-demo/fontend/hipster/client"
+	models "github.com/siriscac/microservices-demo/fontend/hipster/models"
 )
 
 var (
@@ -59,14 +61,14 @@ func (fe *frontendServer) homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type productView struct {
-		Item  *pb.Product
-		Price *pb.Money
+		Item  *models.HipstershopProduct
+		Price *models.HipstershopMoney
 	}
 	ps := make([]productView, len(products))
 	for i, p := range products {
-		price, err := fe.convertCurrency(r.Context(), p.GetPriceUsd(), currentCurrency(r))
+		price, err := fe.convertCurrency(r.Context(), p.PriceUsd, currentCurrency(r))
 		if err != nil {
-			renderHTTPError(log, r, w, errors.Wrapf(err, "failed to do currency conversion for product %s", p.GetId()), http.StatusInternalServerError)
+			renderHTTPError(log, r, w, errors.Wrapf(err, "failed to do currency conversion for product %s", p.Id), http.StatusInternalServerError)
 			return
 		}
 		ps[i] = productView{p, price}
@@ -113,7 +115,7 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	price, err := fe.convertCurrency(r.Context(), p.GetPriceUsd(), currentCurrency(r))
+	price, err := fe.convertCurrency(r.Context(), p.PriceUsd, currentCurrency(r))
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to convert currency"), http.StatusInternalServerError)
 		return
@@ -126,8 +128,8 @@ func (fe *frontendServer) productHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	product := struct {
-		Item  *pb.Product
-		Price *pb.Money
+		Item  *models.HipstershopProduct
+		Price *models.HipstershopMoney
 	}{p, price}
 
 	if err := templates.ExecuteTemplate(w, "product", map[string]interface{}{
@@ -160,7 +162,7 @@ func (fe *frontendServer) addToCartHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := fe.insertCart(r.Context(), sessionID(r), p.GetId(), int32(quantity)); err != nil {
+	if err := fe.insertCart(r.Context(), sessionID(r), p.Id, int32(quantity)); err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to add to cart"), http.StatusInternalServerError)
 		return
 	}
@@ -207,28 +209,28 @@ func (fe *frontendServer) viewCartHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	type cartItemView struct {
-		Item     *pb.Product
+		Item     *models.HipstershopProduct
 		Quantity int32
-		Price    *pb.Money
+		Price    *models.HipstershopMoney
 	}
 	items := make([]cartItemView, len(cart))
-	totalPrice := pb.Money{CurrencyCode: currentCurrency(r)}
+	totalPrice := models.HipstershopMoney{CurrencyCode: currentCurrency(r)}
 	for i, item := range cart {
-		p, err := fe.getProduct(r.Context(), item.GetProductId())
+		p, err := fe.getProduct(r.Context(), item.ProductId)
 		if err != nil {
-			renderHTTPError(log, r, w, errors.Wrapf(err, "could not retrieve product #%s", item.GetProductId()), http.StatusInternalServerError)
+			renderHTTPError(log, r, w, errors.Wrapf(err, "could not retrieve product #%s", item.ProductId), http.StatusInternalServerError)
 			return
 		}
-		price, err := fe.convertCurrency(r.Context(), p.GetPriceUsd(), currentCurrency(r))
+		price, err := fe.convertCurrency(r.Context(), p.PriceUsd, currentCurrency(r))
 		if err != nil {
-			renderHTTPError(log, r, w, errors.Wrapf(err, "could not convert currency for product #%s", item.GetProductId()), http.StatusInternalServerError)
+			renderHTTPError(log, r, w, errors.Wrapf(err, "could not convert currency for product #%s", item.ProductId), http.StatusInternalServerError)
 			return
 		}
 
-		multPrice := money.MultiplySlow(*price, uint32(item.GetQuantity()))
+		multPrice := money.MultiplySlow(*price, uint32(item.Quantity))
 		items[i] = cartItemView{
 			Item:     p,
-			Quantity: item.GetQuantity(),
+			Quantity: item.Quantity,
 			Price:    &multPrice}
 		totalPrice = money.Must(money.Sum(totalPrice, multPrice))
 	}
@@ -268,17 +270,17 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		ccCVV, _      = strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
 	)
 
-	order, err := pb.NewCheckoutServiceClient(fe.checkoutSvcConn).
-		PlaceOrder(r.Context(), &pb.PlaceOrderRequest{
+	order, err := fe.client.CheckoutService.
+		PlaceOrder(r.Context(), &checkout_service.PlaceOrderParams{
 			Email: email,
-			CreditCard: &pb.CreditCardInfo{
+			CreditCard: &models.HipstershopCreditCardInfo{
 				CreditCardNumber:          ccNumber,
 				CreditCardExpirationMonth: int32(ccMonth),
 				CreditCardExpirationYear:  int32(ccYear),
 				CreditCardCvv:             int32(ccCVV)},
 			UserId:       sessionID(r),
 			UserCurrency: currentCurrency(r),
-			Address: &pb.Address{
+			Address: &models.HipstershopAddress{
 				StreetAddress: streetAddress,
 				City:          city,
 				State:         state,
@@ -289,21 +291,21 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to complete the order"), http.StatusInternalServerError)
 		return
 	}
-	log.WithField("order", order.GetOrder().GetOrderId()).Info("order placed")
+	log.WithField("order", order.Order.OrderId).Info("order placed")
 
-	order.GetOrder().GetItems()
+	//order.Order.Items
 	recommendations, _ := fe.getRecommendations(r.Context(), sessionID(r), nil)
 
-	totalPaid := *order.GetOrder().GetShippingCost()
-	for _, v := range order.GetOrder().GetItems() {
-		totalPaid = money.Must(money.Sum(totalPaid, *v.GetCost()))
+	totalPaid := *order.Order.ShippingCost
+	for _, v := range order.Order.Items {
+		totalPaid = money.Must(money.Sum(totalPaid, *v.Cost))
 	}
 
 	if err := templates.ExecuteTemplate(w, "order", map[string]interface{}{
 		"session_id":      sessionID(r),
 		"request_id":      r.Context().Value(ctxKeyRequestID{}),
 		"user_currency":   currentCurrency(r),
-		"order":           order.GetOrder(),
+		"order":           order.Order,
 		"total_paid":      &totalPaid,
 		"recommendations": recommendations,
 	}); err != nil {
@@ -392,6 +394,6 @@ func cartIDs(c []*pb.CartItem) []string {
 	return out
 }
 
-func renderMoney(money pb.Money) string {
-	return fmt.Sprintf("%s %d.%02d", money.GetCurrencyCode(), money.GetUnits(), money.GetNanos()/10000000)
+func renderMoney(money models.HipstershopMoney) string {
+	return fmt.Sprintf("%s %d.%02d", money.CurrencyCode, money.Units, money.Nanos/10000000)
 }
